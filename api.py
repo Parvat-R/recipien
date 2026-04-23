@@ -5,10 +5,10 @@ import psycopg
 import dotenv
 import os
 import getpass
-from search_recipe import search_recipes_by_name, search_recipes
+from search_recipe import _parse_ingredients, search_recipes_by_name, search_recipes
 dotenv.load_dotenv()  # Load DB_URI from .env file if present
 
-DB_URI = os.environ.get("DB_URI")
+DB_URI = os.environ.get("DB_URI", "postgresql://postgres:root@localhost:5432/postgres")
 
 app = FastAPI(
     title="Recipe Search API",
@@ -84,17 +84,18 @@ class NameSearchRequest(BaseModel):
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
 @app.get("/health")
 def health():
     """Simple liveness check."""
     return {"status": "ok"}
-
-
+ 
+ 
 @app.post("/recipes/search", response_model=SearchResponse, tags=["Recipes"])
 def search_recipes_post(body: SearchRequest):
     """
     Search recipes by ingredients (POST body).
-
+ 
     Returns recipes ranked by exact ingredient matches first,
     then fuzzy matches as fallback.
     """
@@ -106,14 +107,14 @@ def search_recipes_post(body: SearchRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+ 
     return SearchResponse(
         query=body.ingredients,
         count=len(results),
-        results=results,
+        results=[RecipeResult.model_validate(r) for r in results],
     )
-
-
+ 
+ 
 @app.get("/recipes/search", response_model=SearchResponse, tags=["Recipes"])
 def search_recipes_get(
     ingredients: list[str] = Query(..., description="Ingredients you have"),
@@ -122,7 +123,7 @@ def search_recipes_get(
 ):
     """
     Search recipes by ingredients (GET query params).
-
+ 
     Example: `/recipes/search?ingredients=chicken&ingredients=garlic&limit=5`
     """
     try:
@@ -133,27 +134,27 @@ def search_recipes_get(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+ 
     return SearchResponse(
         query=ingredients,
         count=len(results),
-        results=results,
+        results=[RecipeResult.model_validate(r) for r in results],
     )
-
-
+ 
+ 
 @app.post("/recipes/search/name", response_model=NameSearchResponse, tags=["Recipes"])
 def search_recipes_by_name_post(body: NameSearchRequest):
     """
     Search recipes by name/title (POST body).
-
+ 
     Uses PostgreSQL full-text search first (`tsvector`), then falls back to
     trigram similarity (`pg_trgm`) if FTS doesn't fill the requested limit.
-
+ 
     **One-time DB setup required** — run this once in your database:
     ```sql
     CREATE INDEX IF NOT EXISTS idx_recipe_title_fts
         ON recipe USING GIN (to_tsvector('english', title));
-
+ 
     CREATE INDEX IF NOT EXISTS idx_recipe_title_trgm
         ON recipe USING GIN (title gin_trgm_ops);
     ```
@@ -166,10 +167,10 @@ def search_recipes_by_name_post(body: NameSearchRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    return NameSearchResponse(query=body.query, count=len(results), results=results)
-
-
+ 
+    return NameSearchResponse(query=body.query, count=len(results), results=[NameSearchResult.model_validate(r) for r in results])
+ 
+ 
 @app.get("/recipes/search/name", response_model=NameSearchResponse, tags=["Recipes"])
 def search_recipes_by_name_get(
     q: str = Query(..., description="Recipe name or partial phrase"),
@@ -178,7 +179,7 @@ def search_recipes_by_name_get(
 ):
     """
     Search recipes by name/title (GET).
-
+ 
     Example: `/recipes/search/name?q=butter+chicken&limit=5`
     """
     try:
@@ -189,10 +190,10 @@ def search_recipes_by_name_get(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    return NameSearchResponse(query=q, count=len(results), results=results)
-
-
+ 
+    return NameSearchResponse(query=q, count=len(results), results=[NameSearchResult.model_validate(r) for r in results])
+ 
+ 
 @app.get("/recipes/{recipe_id}", response_model=RecipeResult, tags=["Recipes"])
 def get_recipe(recipe_id: int):
     """Fetch a single recipe by its ID."""
@@ -205,17 +206,18 @@ def get_recipe(recipe_id: int):
                     WHERE id = %(id)s
                 """, {"id": recipe_id})
                 row = cur.fetchone()
-
+ 
         if not row:
             raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
-
+ 
         cols = ["id", "title", "ingredients", "directions", "link", "source"]
         result = dict(zip(cols, row))
+        result["ingredients"] = _parse_ingredients(result["ingredients"])
         result["exact_count"] = 0
-        result["total_ingredients"] = len(result["ingredients"]) if result["ingredients"] else 0
+        result["total_ingredients"] = len(result["ingredients"])
         result["coverage"] = 0.0
         return result
-
+ 
     except HTTPException:
         raise
     except Exception as e:
