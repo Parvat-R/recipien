@@ -10,3 +10,5 @@ pydantic
 fastapi
 uvicorn
 python-dotenv
+rapidfuzz
+spacy
