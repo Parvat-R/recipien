@@ -1,0 +1,12 @@
+jupyter
+notebook
+polars
+kagglehub
+psycopg
+psycopg[binary]
+adbc-driver-postgresql
+orjson
+pydantic
+fastapi
+uvicorn
+python-dotenv
