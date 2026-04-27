@@ -1,15 +1,15 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, HTTPException
-from models import (
+from backend.models import (
     ResolveRequest, ResolveResponse, SearchRequest,
     SearchResponse, NameSearchRequest, NameSearchResponse,
     RecipeResult, NameSearchResult,
 )
 from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from agent import ask_agent, extract_ingredients_from_image
+from backend.agent import ask_agent, extract_ingredients_from_image
 import base64
-from search import (
+from backend.search import (
     load_canonical_index,
     resolve_ingredients,
     search_recipes,
@@ -124,7 +124,7 @@ def search_by_name_get(
 def get_recipe(recipe_id: int):
     """Fetch a single recipe by ID."""
     import psycopg as _psycopg
-    from search import _parse_ingredients, _parse_directions, DB_URI
+    from backend.search import _parse_ingredients, _parse_directions, DB_URI
     try:
         with _psycopg.connect(DB_URI) as conn:
             with conn.cursor() as cur:

@@ -16,6 +16,5 @@ langchain
 langchain-groq
 langchain_openai
 langchain-google-genai
-streamlit
 python-multipart
 langchain-openrouter
