@@ -12,3 +12,7 @@ uvicorn
 python-dotenv
 rapidfuzz
 spacy
+langchain
+langchain-groq
+langchain-google-genai
+streamlit

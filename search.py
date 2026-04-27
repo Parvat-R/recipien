@@ -135,7 +135,7 @@ def search_recipes(
             """, {"ids": all_ids})
 
             recipe_rows = cur.fetchall()
-            recipe_cols = [desc[0] for desc in cur.description]
+            recipe_cols = [desc[0] for desc in cur.description] if cur.description else []
             recipe_map = {row[0]: dict(zip(recipe_cols, row)) for row in recipe_rows}
 
             results = []
