@@ -5,13 +5,18 @@ from models import (
     SearchResponse, NameSearchRequest, NameSearchResponse,
     RecipeResult, NameSearchResult,
 )
-
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
+from agent import ask_agent, extract_ingredients_from_image
+import base64
 from search import (
     load_canonical_index,
     resolve_ingredients,
     search_recipes,
     search_recipes_by_name,
 )
+from fastapi.middleware.cors import CORSMiddleware
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +29,15 @@ app = FastAPI(
     description="Search recipes by ingredients or name.",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -78,7 +92,7 @@ def search_recipes_get(
 def search_by_name_post(body: NameSearchRequest):
     """Search recipes by title (POST)."""
     try:
-        results = search_recipes_by_name(body.query, body.limit, body.fuzzy_threshold)
+        results = search_recipes_by_name(body.query.replace('recipe', ""), body.limit, body.fuzzy_threshold)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return NameSearchResponse(
@@ -96,7 +110,7 @@ def search_by_name_get(
 ):
     """Search recipes by title (GET). Example: ?q=butter+chicken"""
     try:
-        results = search_recipes_by_name(q, limit, fuzzy_threshold)
+        results = search_recipes_by_name(q.replace("recipe", ""), limit, fuzzy_threshold)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return NameSearchResponse(
@@ -133,3 +147,41 @@ def get_recipe(recipe_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+    
+@app.post("/chat", tags=["Chat"])
+async def chat(
+    prompt: str = Form(""),
+    thread_id: str = Form(...),
+    image: UploadFile | None = File(None),
+):
+    """
+    Send a message to the recipe agent.
+    Optionally attach an image — ingredients will be extracted and prepended to the prompt.
+    """
+    final_prompt = prompt
+
+    if image:
+        image_bytes = await image.read()
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        media_type = image.content_type  # e.g. "image/jpeg"
+        if media_type is None:
+            media_type = "png"
+
+        detected = extract_ingredients_from_image(image_b64, media_type)
+
+        if prompt.strip():
+            final_prompt = f"{detected} Also, {prompt}"
+        else:
+            final_prompt = detected
+
+    if not final_prompt.strip():
+        raise HTTPException(status_code=400, detail="Provide a prompt or an image.")
+
+    def stream():
+        for chunk in ask_agent(final_prompt, thread_id=thread_id):
+            print(chunk, end="")
+            yield chunk
+
+    return StreamingResponse(stream(), media_type="text/plain") # type:ignore

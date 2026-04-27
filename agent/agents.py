@@ -10,7 +10,7 @@ groq_checkpointer = InMemorySaver()
 gemini_checkpointer = InMemorySaver()
 
 groq_model = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="meta-llama/llama-4-scout-17b-16e-instruct",
     temperature=0,
     max_tokens=4096,
     timeout=None,

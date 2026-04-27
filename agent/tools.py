@@ -20,6 +20,7 @@ def search_recipes_by_ingredients(ingredients: str, limit: int | str = 5) -> str
     Returns:
         A summary of matching recipes with coverage info.
     """
+    print(ingredients, limit)
     if isinstance(limit, str):
         try:
             limit = int(limit)
